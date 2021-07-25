@@ -1,0 +1,10 @@
+SANDBOX
+.vscode/
+.venv/
+**/__pycache__
+**/*.pyc
+**/.ipynb_checkpoints
+js-data/
+build-tools/schemas
+build-tools/models
+build-tools/*.gz
