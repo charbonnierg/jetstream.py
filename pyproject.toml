@@ -1,9 +1,9 @@
 [tool.poetry]
-name = "jetstream.py"
+name = "jetstream-python"
 version = "0.1.0"
 description = ""
 authors = ["charbonnierg <guillaume.charbonnier@araymond.com>"]
-packages = [{include = "jsm", from="src" }]
+packages = [{ include = "jsm", from = "src" }]
 
 [tool.poetry.dependencies]
 python = "^3.8"
