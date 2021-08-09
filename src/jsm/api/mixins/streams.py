@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
-from nats.aio.client import Msg
-
-from jsm.models.base import IoNatsJetstreamApiV1Response
 from jsm.models.errors import IoNatsJetstreamApiV1ErrorResponse
 from jsm.models.streams import (
     Discard,
@@ -25,15 +22,15 @@ from jsm.models.streams import (
     IoNatsJetstreamApiV1StreamPurgeResponse,
     IoNatsJetstreamApiV1StreamUpdateRequest,
     IoNatsJetstreamApiV1StreamUpdateResponse,
+    Mirror,
     Retention,
     Storage,
 )
 
-if TYPE_CHECKING:
-    from .client import Client
+from .request_reply import BaseJetStreamRequestReplyMixin, JetStreamResponse
 
 
-class StreamsMixin:
+class StreamsMixin(BaseJetStreamRequestReplyMixin):
     """This mixin implements methods used to manipulate Jetstream Streams.
 
     Notes:
@@ -43,18 +40,18 @@ class StreamsMixin:
         * Jetstream NATS API Reference: <https://docs.nats.io/jetstream/nats_api_reference#streams>
     """
 
-    async def stream_list(  # type: ignore[misc]
-        self: Client,
-        timeout: float = 0.5,
+    async def stream_list(
+        self,
         offset: int = 0,
-        raise_on_error: bool = False,
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
     ) -> Union[
         IoNatsJetstreamApiV1StreamListResponse, IoNatsJetstreamApiV1ErrorResponse
     ]:
         """List existing streams.
 
         Args:
-            offset:
+            offset: number of streams to skip
 
         Returns:
             An IoNatsJetstreamApiV1StreamListResponse which holds a list of streams as `streams` attribute.
@@ -66,23 +63,19 @@ class StreamsMixin:
             >>>     print(stream.name)
         """
         options = IoNatsJetstreamApiV1StreamListRequest(offset=offset)
-        msg: Msg = await self.request(
-            "$JS.API.STREAM.LIST",
-            payload=options.json().encode("utf-8"),
+        return await self._jetstream_request(
+            "STREAM.LIST",
+            options,
+            JetStreamResponse[IoNatsJetstreamApiV1StreamListResponse],
+            raise_on_error=raise_on_error,
             timeout=timeout,
         )
-        response = IoNatsJetstreamApiV1Response[
-            IoNatsJetstreamApiV1StreamListResponse
-        ].parse_raw(msg.data)
-        if raise_on_error:
-            response.raise_on_error()
-        return response.__root__
 
-    async def stream_names(  # type: ignore[misc]
-        self: Client,
-        timeout: float = 0.5,
+    async def stream_names(
+        self,
         offset: int = 0,
-        raise_on_error: bool = False,
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
     ) -> Union[
         IoNatsJetstreamApiV1StreamNamesResponse, IoNatsJetstreamApiV1ErrorResponse
     ]:
@@ -102,20 +95,16 @@ class StreamsMixin:
             >>>     print(stream)
         """
         options = IoNatsJetstreamApiV1StreamNamesRequest(offset=offset)
-        msg: Msg = await self.request(
-            "$JS.API.STREAM.NAMES",
-            payload=options.json().encode("utf-8"),
+        return await self._jetstream_request(
+            "STREAM.NAMES",
+            options,
+            JetStreamResponse[IoNatsJetstreamApiV1StreamNamesResponse],
+            raise_on_error=raise_on_error,
             timeout=timeout,
         )
-        response = IoNatsJetstreamApiV1Response[
-            IoNatsJetstreamApiV1StreamNamesResponse
-        ].parse_raw(msg.data)
-        if raise_on_error:
-            response.raise_on_error()
-        return response.__root__
 
-    async def stream_create(  # type: ignore[misc]
-        self: Client,
+    async def stream_create(
+        self,
         name: str,
         /,
         subjects: Optional[List[str]] = None,
@@ -128,8 +117,10 @@ class StreamsMixin:
         max_msg_size: int = -1,
         storage: Storage = "file",
         num_replicas: int = 1,
-        timeout: float = 0.5,
-        raise_on_error: bool = False,
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
+        mirror: Optional[Mirror] = None,
+        sources: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> Union[
         IoNatsJetstreamApiV1StreamCreateResponse, IoNatsJetstreamApiV1ErrorResponse
@@ -147,12 +138,16 @@ class StreamsMixin:
             * `max_msg_size`: The largest message that will be accepted by the Stream. -1 for unlimited.
             * `storage`: The storage backend to use for the Stream ('file' or 'memory').
             * `num_replicas`: How many replicas to keep for each message.
+            * `mirror`: Maintains a 1:1 mirror of another stream with name matching this argument.  When a mirror is configured subjects and sources must be empty.
+            * `sources`: List of Stream names to replicate into this Stream.
             * `timeout`: timeout to wait before raising a TimeoutError.
 
         Returns:
             An IoNatsJetstreamApiV1StreamCreateResponse instance which holds either an error or stream infos and state.
 
         References:
+            * Streams - [NATS Docs](https://docs.nats.io/jetstream/concepts/streams)
+            * Stream, NATS API Reference - [NATS Docs](https://docs.nats.io/jetstream/nats_api_reference#streams)
             * `io.nats.jetstream.api.v1.stream_create_response` (JSON Schema): <https://github.com/nats-io/jsm.go/blob/v0.0.24/schemas/jetstream/api/v1/stream_create_request.json>
             * `io.nats.jetstream.api.v1.stream_create_request` (JSON Schema): <https://github.com/nats-io/jsm.go/blob/v0.0.24/schemas/jetstream/api/v1/stream_create_response.json>
         """
@@ -168,27 +163,25 @@ class StreamsMixin:
             max_age=max_age,
             storage=storage,
             num_replicas=num_replicas,
+            mirror=mirror,
+            sources=sources,
             **kwargs,
         )
-        msg: Msg = await self.request(
-            f"$JS.API.STREAM.CREATE.{name}",
-            payload=options.json().encode("utf-8"),
+        return await self._jetstream_request(
+            f"STREAM.CREATE.{name}",
+            options,
+            JetStreamResponse[IoNatsJetstreamApiV1StreamCreateResponse],
+            raise_on_error=raise_on_error,
             timeout=timeout,
         )
-        response = IoNatsJetstreamApiV1Response[
-            IoNatsJetstreamApiV1StreamCreateResponse
-        ].parse_raw(msg.data)
-        if raise_on_error:
-            response.raise_on_error()
-        return response.__root__
 
-    async def stream_info(  # type: ignore[misc]
-        self: Client,
+    async def stream_info(
+        self,
         name: str,
         /,
         deleted_details: bool = False,
-        timeout: float = 0.5,
-        raise_on_error: bool = False,
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
     ) -> Union[
         IoNatsJetstreamApiV1StreamInfoResponse, IoNatsJetstreamApiV1ErrorResponse
     ]:
@@ -203,20 +196,16 @@ class StreamsMixin:
             An IoNatsJetstreamApiV1StreamInfoResponse instance which holds info about the stream.
         """
         options = IoNatsJetstreamApiV1StreamInfoRequest(deleted_details=deleted_details)
-        msg: Msg = await self.request(
-            f"$JS.API.STREAM.INFO.{name}",
-            payload=options.json().encode("utf-8"),
+        return await self._jetstream_request(
+            f"STREAM.INFO.{name}",
+            options,
+            JetStreamResponse[IoNatsJetstreamApiV1StreamInfoResponse],
+            raise_on_error=raise_on_error,
             timeout=timeout,
         )
-        response = IoNatsJetstreamApiV1Response[
-            IoNatsJetstreamApiV1StreamInfoResponse
-        ].parse_raw(msg.data)
-        if raise_on_error:
-            response.raise_on_error()
-        return response.__root__
 
-    async def stream_update(  # type: ignore[misc]
-        self: Client,
+    async def stream_update(
+        self,
         _name: str,
         /,
         name: Optional[str] = None,
@@ -229,12 +218,37 @@ class StreamsMixin:
         max_age: Optional[int] = None,
         storage: Optional[Storage] = None,
         num_replicas: Optional[int] = None,
-        timeout: float = 0.5,
-        raise_on_error: bool = False,
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[
         IoNatsJetstreamApiV1StreamUpdateResponse, IoNatsJetstreamApiV1ErrorResponse
     ]:
+        """Update an existing stream by its name.
+
+        Args:
+            * `subjects`: A list of subjects to consume, supports wildcards. Must be empty when a mirror is configured. May be empty when sources are configured.
+            * `retention`: How messages are retained in the Stream, once this is exceeded old messages are removed.
+            * `max_consumers`: How many Consumers can be defined for a given Stream. -1 for unlimited.
+            * `max_msgs`: How many messages may be in a Stream, oldest messages will be removed if the Stream exceeds this size. -1 for unlimited.
+            * `max_msgs_per_subject`: For wildcard streams ensure that for every unique subject this many messages are kept - a per subject retention limit
+            * `max_bytes`: How big the Stream may be, when the combined stream size exceeds this old messages are removed. -1 for unlimited.
+            * `max_age`: Maximum age of any message in the stream, expressed in nanoseconds. 0 for unlimited.
+            * `max_msg_size`: The largest message that will be accepted by the Stream. -1 for unlimited.
+            * `storage`: The storage backend to use for the Stream ('file' or 'memory').
+            * `num_replicas`: How many replicas to keep for each message.
+            * `timeout`: timeout to wait before raising a TimeoutError.
+            * `raise_on_error`: raise a JetstreamException instead of returning an error response when set to True.
+
+        Returns:
+            An IoNatsJetstreamApiV1StreamCreateResponse instance which holds either an error or stream infos and state.
+
+        References:
+            * Streams - [NATS Docs](https://docs.nats.io/jetstream/concepts/streams)
+            * Stream, NATS API Reference - [NATS Docs](https://docs.nats.io/jetstream/nats_api_reference#streams)
+            * `io.nats.jetstream.api.v1.stream_update_response` (JSON Schema): <https://github.com/nats-io/jsm.go/blob/v0.0.24/schemas/jetstream/api/v1/stream_update_response.json>
+            * `io.nats.jetstream.api.v1.stream_update_request` (JSON Schema): <https://github.com/nats-io/jsm.go/blob/v0.0.24/schemas/jetstream/api/v1/stream_update_request.json>
+        """
         current_config = (await self.stream_info(_name, False)).config.dict(
             exclude_unset=True,
             exclude_none=True,
@@ -274,146 +288,133 @@ class StreamsMixin:
         options = IoNatsJetstreamApiV1StreamUpdateRequest(
             **{**current_config, **kwargs, **new_config}
         )
-        # return options
-        msg: Msg = await self.request(
-            f"$JS.API.STREAM.UPDATE.{_name}",
-            payload=options.json().encode("utf-8"),
+        return await self._jetstream_request(
+            f"STREAM.UPDATE.{_name}",
+            options,
+            JetStreamResponse[IoNatsJetstreamApiV1StreamUpdateResponse],
+            raise_on_error=raise_on_error,
             timeout=timeout,
         )
-        response = IoNatsJetstreamApiV1Response[
-            IoNatsJetstreamApiV1StreamUpdateResponse
-        ].parse_raw(msg.data)
-        if raise_on_error:
-            response.raise_on_error()
-        return response.__root__
 
-    async def stream_delete(  # type: ignore[misc]
-        self: Client,
+    async def stream_delete(
+        self,
         name: str,
-        timeout: float = 0.5,
-        raise_on_error: bool = False,
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
     ) -> Union[
         IoNatsJetstreamApiV1StreamDeleteResponse, IoNatsJetstreamApiV1ErrorResponse
     ]:
-        msg: Msg = await self.request(
-            f"$JS.API.STREAM.DELETE.{name}", b"", timeout=timeout
-        )
-        response = IoNatsJetstreamApiV1Response[
-            IoNatsJetstreamApiV1StreamDeleteResponse
-        ].parse_raw(msg.data)
-        if raise_on_error:
-            response.raise_on_error()
-        return response.__root__
+        """Delete a stream by its name.
 
-    async def stream_purge(  # type: ignore[misc]
-        self: Client,
+        Args:
+            * `name`: Name of the stream
+            * `timeout`: timeout to wait before raising a TimeoutError.
+            * `raise_on_error`: raise a JetstreamException instead of returning an error response when set to True.
+
+        Returns:
+            An IoNatsJetstreamApiV1StreamDeleteResponse or an IoNatsJetstreamApiV1ErrorResponse
+        """
+        return await self._jetstream_request(
+            f"STREAM.DELETE.{name}",
+            None,
+            JetStreamResponse[IoNatsJetstreamApiV1StreamDeleteResponse],
+            raise_on_error=raise_on_error,
+            timeout=timeout,
+        )
+
+    async def stream_purge(
+        self,
         name: str,
         filter: Optional[str] = None,
         seq: Optional[int] = None,
         keep: Optional[int] = None,
-        timeout: float = 0.5,
-        raise_on_error: bool = False,
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
     ) -> Union[
         IoNatsJetstreamApiV1StreamPurgeResponse, IoNatsJetstreamApiV1ErrorResponse
     ]:
+        """Purge messages from a stream.
+
+        Args:
+            * `name`: Name of the stream
+            * `filter`: Restrict purging to messages that match this subject.
+            * `seq`: Purge all messages up to but not including the message with this sequence. Can be combined with subject filter but not the keep option.
+            * `keep`: Ensures this many messages are present after the purge. Can be combined with the subject filter but not the sequence.
+            * `timeout`: timeout to wait before raising a TimeoutError.
+            * `raise_on_error`: raise a JetstreamException instead of returning an error response when set to True.
+
+        Returns:
+            An IoNatsJetstreamApiV1StreamPurgeResponse or an IoNatsJetstreamApiV1ErrorResponse
+        """
         options = IoNatsJetstreamApiV1StreamPurgeRequest(
             filter=filter, seq=seq, keep=keep
         )
-        msg: Msg = await self.request(
-            f"$JS.API.STREAM.PURGE.{name}",
-            options.json().encode("utf-8"),
+        return await self._jetstream_request(
+            f"STREAM.PURGE.{name}",
+            options,
+            JetStreamResponse[IoNatsJetstreamApiV1StreamPurgeResponse],
+            raise_on_error=raise_on_error,
             timeout=timeout,
         )
-        response = IoNatsJetstreamApiV1Response[
-            IoNatsJetstreamApiV1StreamPurgeResponse
-        ].parse_raw(msg.data)
-        if raise_on_error:
-            response.raise_on_error()
-        return response.__root__
 
-    async def stream_msg_get(  # type: ignore[misc]
-        self: Client,
+    async def stream_msg_get(
+        self,
         name: str,
         /,
         seq: int,
-        timeout: float = 0.5,
-        raise_on_error: bool = False,
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
     ) -> Union[
         IoNatsJetstreamApiV1StreamMsgGetResponse, IoNatsJetstreamApiV1ErrorResponse
     ]:
+        """Get a message from a stream by sequence.
+
+        Args:
+            * `name`: Name of the stream.
+            * `seq`: Stream sequence number of the message to get.
+            * `timeout`: timeout to wait before raising a TimeoutError.
+            * `raise_on_error`: raise a JetstreamException instead of returning an error response when set to True.
+
+        Returns:
+               An IoNatsJetstreamApiV1StreamMsgGetResponse or an IoNatsJetstreamApiV1ErrorResponse.
+        """
         options = IoNatsJetstreamApiV1StreamMsgGetRequest(seq=seq)
-        msg: Msg = await self.request(
-            f"$JS.API.STREAM.MSG.GET.{name}",
-            options.json().encode("utf-8"),
+        return await self._jetstream_request(
+            f"STREAM.MSG.GET.{name}",
+            options,
+            JetStreamResponse[IoNatsJetstreamApiV1StreamMsgGetResponse],
+            raise_on_error=raise_on_error,
             timeout=timeout,
         )
-        response = IoNatsJetstreamApiV1Response[
-            IoNatsJetstreamApiV1StreamMsgGetResponse
-        ].parse_raw(msg.data)
-        if raise_on_error:
-            response.raise_on_error()
-        return response.__root__
 
-    async def stream_msg_delete(  # type: ignore[misc]
-        self: Client,
+    async def stream_msg_delete(
+        self,
         name: str,
         /,
         seq: int,
         no_erase: Optional[bool] = None,
-        timeout: float = 0.5,
-        raise_on_error: bool = False,
-    ) -> IoNatsJetstreamApiV1StreamMsgDeleteResponse:
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
+    ) -> Union[
+        IoNatsJetstreamApiV1StreamMsgDeleteResponse, IoNatsJetstreamApiV1ErrorResponse
+    ]:
+        """Delete a message from a stream.
+
+        Args:
+            * `name`: Name of the stream
+            * `seq`: Stream sequence number of the message to delete.
+            * `no_erase`: Default will securely remove a message and rewrite the data with random data, set this to true to only remove the message
+            * `timeout`: timeout to wait before raising a TimeoutError.
+            * `raise_on_error`: raise a JetstreamException instead of returning an error response when set to True.
+
+        Returns:
+            An IoNatsJetstreamApiV1StreamMsgDeleteResponse or an IoNatsJetstreamApiV1ErrorResponse.
+        """
         options = IoNatsJetstreamApiV1StreamMsgDeleteRequest(seq=seq, no_erase=no_erase)
-        msg: Msg = await self.request(
-            f"$JS.API.STREAM.MSG.DELETE.{name}",
-            options.json().encode("utf-8"),
+        return await self._jetstream_request(
+            f"STREAM.MSG.DELETE.{name}",
+            options,
+            JetStreamResponse[IoNatsJetstreamApiV1StreamMsgDeleteResponse],
+            raise_on_error=raise_on_error,
             timeout=timeout,
         )
-        response = IoNatsJetstreamApiV1Response[
-            IoNatsJetstreamApiV1StreamMsgDeleteResponse
-        ].parse_raw(msg.data)
-        if raise_on_error:
-            response.raise_on_error()
-        return response.__root__
-
-    # async def stream_snapshot(  # type: ignore[misc]
-    #     self: Client,
-    #     name: str,
-    #     /,
-    #     no_consumers: Optional[bool] = None,
-    #     chunk_size: Optional[int] = None,
-    #     jsck: Optional[bool] = False,
-    #     timeout: float = 0.5,
-    #     raise_on_error: bool = False,
-    # ) -> IoNatsJetstreamApiV1StreamSnapshotResponse:
-    #     backup: Optional[bytes] = None
-    #     deliver_subject = self._nuid.next().decode("utf-8")
-    #     backup_queue: Queue[bytes] = asyncio.Queue(maxsize=1)
-
-    #     async def handle_backup(msg: Msg) -> None:
-    #         await backup_queue.put(msg)
-
-    #     sid = await self.subscribe(deliver_subject, cb=handle_backup)
-    #     options = IoNatsJetstreamApiV1StreamSnapshotRequest(
-    #         deliver_subject=deliver_subject,
-    #         no_consumers=no_consumers,
-    #         chunk_size=chunk_size,
-    #         jsck=jsck,
-    #     )
-    #     msg: Msg = await self.request(
-    #         f"$JS.API.STREAM.SNAPSHOT.{name}",
-    #         options.json().encode("utf-8"),
-    #         timeout=timeout,
-    #     )
-    #     response = IoNatsJetstreamApiV1Response[
-    #         IoNatsJetstreamApiV1StreamSnapshotResponse
-    #     ].parse_raw(msg.data)
-    #     if not isinstance(response.__root__, IoNatsJetstreamApiV1ErrorResponse):
-    #         backup = await backup_queue.get()
-    #         backup_queue.task_done()
-    #         # TODO: What do we do with the backup ? We should certainly not
-    #         # handle it in such manner that it blocks this function call
-    #     await self.unsubscribe(sid)
-    #     if raise_on_error:
-    #         response.raise_on_error()
-    #     return response.__root__, backup

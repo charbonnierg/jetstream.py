@@ -1,44 +1,80 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, conint
+from pydantic import Field
 
-from .base import IoNatsJetstreamApiV1ResponseItem
+from .base import BaseResponse, JetstreamModel
 
 
-class Limits(BaseModel):
-    max_memory: conint(ge=-1) = Field(  # type: ignore[valid-type]
+class Limits(JetstreamModel):
+    """Account limits
+
+    References:
+        * Multi-tenancy & Resource Mgmt, NATS Docs - https://docs.nats.io/jetstream/resource_management
+    """
+
+    max_memory: int = Field(
         ...,
         description="The maximum amount of Memory storage Stream Messages may consume",
+        ge=-1,
     )
-    max_storage: conint(ge=-1) = Field(  # type: ignore[valid-type]
+    max_storage: int = Field(
         ...,
         description="The maximum amount of File storage Stream Messages may consume",
+        ge=-1,
     )
-    max_streams: conint(ge=-1) = Field(  # type: ignore[valid-type]
-        ..., description="The maximum number of Streams an account can create"
+    max_streams: int = Field(
+        ...,
+        description="The maximum number of Streams an account can create",
+        ge=-1,
     )
-    max_consumers: conint(ge=-1) = Field(  # type: ignore[valid-type]
-        ..., description="The maximum number of Consumer an account can create"
-    )
-
-
-class Api(BaseModel):
-    total: conint(ge=0) = Field(  # type: ignore[valid-type]
-        ..., description="Total number of API requests received for this account"
-    )
-    errors: conint(ge=0) = Field(  # type: ignore[valid-type]
-        ..., description="API requests that resulted in an error response"
+    max_consumers: int = Field(
+        ...,
+        description="The maximum number of Consumer an account can create",
+        ge=-1,
     )
 
 
-class IoNatsJetstreamApiV1AccountInfoResponse(IoNatsJetstreamApiV1ResponseItem):
-    memory: conint(ge=0) = Field(  # type: ignore[valid-type]
-        ..., description="Memory Storage being used for Stream Message storage"
+class Api(JetstreamModel):
+    """API stats"""
+
+    total: int = Field(
+        ...,
+        description="Total number of API requests received for this account",
+        ge=0,
     )
-    storage: conint(ge=0) = Field(  # type: ignore[valid-type]
-        ..., description="File Storage being used for Stream Message storage"
+    errors: int = Field(
+        ...,
+        description="API requests that resulted in an error response",
+        ge=0,
     )
-    streams: conint(ge=0) = Field(..., description="Number of active Streams")  # type: ignore[valid-type]
-    consumers: conint(ge=0) = Field(..., description="Number of active Consumers")  # type: ignore[valid-type]
-    limits: Limits
-    api: Api
+
+
+class IoNatsJetstreamApiV1AccountInfoResponse(BaseResponse):
+    """Account information
+
+    References:
+        * Account Information, NATS Docs - https://docs.nats.io/jetstream/administration/account#account-information
+    """
+
+    memory: int = Field(
+        ...,
+        description="Memory Storage being used for Stream Message storage",
+        ge=0,
+    )
+    storage: int = Field(
+        ...,
+        description="File Storage being used for Stream Message storage",
+        ge=0,
+    )
+    streams: int = Field(
+        ...,
+        description="Number of active Streams",
+        ge=0,
+    )
+    consumers: int = Field(
+        ...,
+        description="Number of active Consumers",
+        ge=0,
+    )
+    limits: Limits = Field(..., description="Account limits")
+    api: Api = Field(..., description="API requests count")

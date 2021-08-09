@@ -32,7 +32,8 @@ from jsm.api.client import Client as JS
 
 
 async def run():
-    js = JS()
+    # You can optionally specify a js domain using "domain" keyword argument
+    js = JS(domain=None)
 
     # This is the connect method from nats.aio.client.Client class
     await js.connect()
@@ -60,8 +61,21 @@ async def run():
     assert msg.data == b"hola"
 ```
 
+## Example Notebooks
+
+Two examples notebooks are available:
+
+- [01-streams.ipynb](https://github.com/charbonnierg/jetstream.py/blob/next/examples/01-streams.ipynb): Demonstrate how to work with streams
+
+- [02-consumers.ipynb](https://github.com/charbonnierg/jetstream.py/blob/next/examples/02-consumers.ipynb): Demonstrate how to work with consumers
 
 ## Features
+
+### Misc
+
+- Use a custom domain
+- Allow default timeout configuration
+- Allow default error handling configuration (raise error or return error response)
 
 ### Account Info
 
@@ -109,8 +123,8 @@ Take the `$JS.API.STREAMS.LIST` method for example:
 ```python
  async def stream_list(
         self,
-        timeout: float = 0.5,
         offset: int = 0,
+        timeout: float = 0.5,
         # By default error are never raised
         raise_on_error: bool = False,
         # Both return types inherit at some point from pydantic.BaseModel
@@ -120,27 +134,23 @@ Take the `$JS.API.STREAMS.LIST` method for example:
         # Or an error
         IoNatsJetstreamApiV1ErrorResponse
     ]:
-        # First gather options
+        # First gather options as an instance of pydantic.BaseModel child class
         options = IoNatsJetstreamApiV1StreamListRequest(offset=offset)
-        # Send a request to expected subject
-        msg: Msg = await self.request(
-            "$JS.API.STREAM.LIST",
-            # Send the request options as utf-8 encoded JSON
-            payload=options.json().encode("utf-8"),
+        # Send a request using helper method
+        return await self._jetstream_request(
+            # Specify subject without prefix
+            "STREAM.LIST",
+            # Specify options
+            options,
+            # Specify response validator using generic JetstreamResponse can custom model
+            JetStreamResponse[IoNatsJetstreamApiV1StreamListResponse],
+            # Optionally raise on error
+            raise_on_error=raise_on_error,
             timeout=timeout,
         )
-        # Parse JetStream response
-        response = IoNatsJetstreamApiV1Response[
-            IoNatsJetstreamApiV1StreamListResponse
-        ].parse_raw(msg.data)
-        # Optionally check for error and raise error accordingly
-        if raise_on_error:
-            response.raise_on_error()
-        # Return parsed response
-        return response.__root__
 ```
 
-[`IoNatsJetstreamApiV1Response`](https://github.com/charbonnierg/jetstream.py/blob/next/src/jsm/models/base.py#L28) is a `pydantic.generics.GenericModel` used to either parse an error, or a response according to the type given as argument.
+[`JetStreamResponse`](https://github.com/charbonnierg/jetstream.py/blob/next/src/jsm/api/mixins/request_reply.py#L15) is a `pydantic.generics.GenericModel` used to either parse an error, or a response according to the type given as argument.
 
 
 ## References
@@ -149,7 +159,7 @@ Take the `$JS.API.STREAMS.LIST` method for example:
 
 ## About model generation
 
-A first attempt was made to generate `pydantic` models from [`JSON Schemas` files](https://github.com/nats-io/jsm.go/tree/v0.0.25/schemas/jetstream), sadly the generated files were not valid or complete.
+A first attempt was made to generate `pydantic` models from [`JSON Schemas` files](https://github.com/nats-io/jsm.go/tree/v0.0.25/schemas/jetstream) using [`datamodel-code-generator`](https://github.com/koxudaxi/datamodel-code-generator), sadly the generated files were not valid or complete.
 
 A script is available in `build-tools/` repository to generate models automatically. Run the following command to generate the files:
 
@@ -157,8 +167,7 @@ A script is available in `build-tools/` repository to generate models automatica
 python build-tools/generate_models.py
 ```
 
-
-Files in [`jsm.models`](./src/jsm/models) submodule are mostly copy/pasted from automatically generated models with a few manual modifications.
+Files in [`jsm.models`](./src/jsm/models) were first generated using `datamodel-code-generator` but several manual modidications were required.
 
 ## Tools & Libraries
 

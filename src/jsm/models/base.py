@@ -1,34 +1,24 @@
 from __future__ import annotations
 
-from typing import Any, Generic, Protocol, TypeVar, Union
+from datetime import datetime
 
 from pydantic import BaseModel
-from pydantic.generics import GenericModel
 
-from .errors import IoNatsJetstreamApiV1ErrorResponse, IoNatsJetstreamApiV1Exception
-
-ItemT = TypeVar("ItemT", bound="IoNatsJetstreamApiV1ResponseItem")
+from .utils import convert_datetime_to_iso_8601_with_z_suffix
 
 
-class MsgProtocol(Protocol):
-    @property
-    def data(self) -> Any:
-        ...
+class JetstreamModel(BaseModel):
+    class Config:
+        json_encoder = {datetime: convert_datetime_to_iso_8601_with_z_suffix}
 
 
-class IoNatsJetstreamApiV1ResponseItem(BaseModel):
+class BaseRequest(JetstreamModel):
+    pass
+
+
+class BaseResponse(JetstreamModel):
     type: str
 
     def raise_on_error(self) -> None:
-        """Raise an error if the response if a JetstreamApiError."""
-        if hasattr(self, "error") and self.error:
-            raise IoNatsJetstreamApiV1Exception(self)
-
-
-class IoNatsJetstreamApiV1Response(GenericModel, Generic[ItemT]):
-    __root__: Union[IoNatsJetstreamApiV1ErrorResponse, ItemT]
-
-    def raise_on_error(self) -> None:
-        """Raise an error if the response if a JetstreamApiError."""
-        if isinstance(self.__root__, IoNatsJetstreamApiV1ErrorResponse):
-            raise IoNatsJetstreamApiV1Exception(self.__root__)
+        """Do not return an error by default."""
+        return

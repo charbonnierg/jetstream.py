@@ -1,19 +1,39 @@
+from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, conint, constr
+from pydantic import Field
+
+from .base import JetstreamModel
 
 
-class Message(BaseModel):
-    subject: constr(min_length=1) = Field(  # type: ignore[valid-type]
-        ..., description="The subject the message was originally received on"
+class Message(JetstreamModel):
+    """A message read from a stream
+
+    References:
+        * Fetching the next message from a pull base consumer - [NATS Docs](https://docs.nats.io/jetstream/nats_api_reference#fetching-the-next-message-from-a-pull-based-consumer)
+        * Fetching a message from a stream by sequence - [NATS Docs](https://docs.nats.io/jetstream/nats_api_reference#fetching-from-a-stream-by-sequence)
+    """
+
+    subject: str = Field(
+        ...,
+        description="The subject the message was originally received on",
+        min_length=1,
     )
-    seq: conint(ge=0) = Field(  # type: ignore[valid-type]
-        ..., description="The sequence number of the message in the Stream"
+    seq: int = Field(
+        ...,
+        description="The sequence number of the message in the Stream",
+        ge=0,
     )
-    data: constr(min_length=0) = Field(  # type: ignore[valid-type]
-        ..., description="The base64 encoded payload of the message body"
+    data: str = Field(
+        ...,
+        description="The base64 encoded payload of the message body",
+        min_length=1,
     )
-    time: str = Field(..., description="The time the message was received")
+    time: datetime = Field(
+        ...,
+        description="The time the message was received",
+    )
     hdrs: Optional[str] = Field(
-        None, description="Base64 encoded headers for the message"
+        None,
+        description="Base64 encoded headers for the message",
     )

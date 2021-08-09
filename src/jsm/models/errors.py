@@ -1,41 +1,26 @@
-from typing import Optional
+from pydantic import Field
 
-from pydantic import BaseModel, Field, conint
+from jsm.api.errors import JetStreamError
+
+from .base import BaseResponse, JetstreamModel
 
 
-class IoNatsJetstreamApiV1ErrorItem(BaseModel):
-    code: Optional[conint(ge=300, le=699)] = Field(  # type: ignore[valid-type]
-        500, description="HTTP like error code in the 300 to 500 range"
+class IoNatsJetstreamApiV1ErrorItem(JetstreamModel):
+    """An error as found in a JetStream API response"""
+
+    code: int = Field(
+        500, description="HTTP like error code in the 300 to 500 range", ge=300, le=699
     )
-    description: Optional[str] = Field(
-        None, description="A human friendly description of the error"
+    description: str = Field(
+        "", description="A human friendly description of the error"
     )
 
 
-class IoNatsJetstreamApiV1ErrorResponse(BaseModel):
-    type: str
+class IoNatsJetstreamApiV1ErrorResponse(BaseResponse):
+    """A JetStream API error response"""
+
     error: IoNatsJetstreamApiV1ErrorItem
 
     def raise_on_error(self) -> None:
-        raise IoNatsJetstreamApiV1Exception(self)
-
-
-class IoNatsJetstreamApiV1Exception(Exception):
-    def __init__(self, response: IoNatsJetstreamApiV1ErrorResponse) -> None:
-        super().__init__(
-            f"Status code={response.error.code} | Description={response.error.description} | Type={response.type}"
-        )
-        self.__error__ = response.error
-        self.__type__ = response.type
-
-    @property
-    def code(self) -> Optional[int]:
-        return self.__error__.code
-
-    @property
-    def description(self) -> Optional[str]:
-        return self.__error__.description
-
-    @property
-    def type(self) -> str:
-        return self.type
+        """Raise an error using instance attributes (description, code, type)"""
+        raise JetStreamError(self.error.description, self.error.code, self.type)
