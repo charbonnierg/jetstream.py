@@ -284,7 +284,7 @@ class IoNatsJetstreamApiV1ConsumerNamesResponse(BaseResponse):
         description="Maximum number of consumers to return",
         ge=0,
     )
-    consumers: List[IoNatsJetstreamApiV1ConsumerItem] = Field(
+    consumers: List[str] = Field(
         [],
         description="A list of consumer names",
     )
