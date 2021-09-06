@@ -199,6 +199,7 @@ class ConsumersMixin(BaseJetStreamRequestReplyMixin):
         /,
         auto_ack: bool = True,
         max_msgs: Optional[int] = None,
+        timeout: Optional[float] = None,
     ) -> AsyncGenerator[Msg, None]:
         # inbox: str = self._nc._nuid.next().decode("utf-8")
         inbox: str = self._nuid.next().decode("utf-8")  # type: ignore[attr-defined]
@@ -221,7 +222,7 @@ class ConsumersMixin(BaseJetStreamRequestReplyMixin):
                     payload=b"1",
                 )
                 # Wait for next message on inbox subscription
-                msg = await subscription.next_msg()
+                msg = await subscription.next_msg(timeout=timeout)
                 # Increment message counter
                 total += 1
                 # Optionally acknowledge the message
