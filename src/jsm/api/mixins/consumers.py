@@ -186,9 +186,10 @@ class ConsumersMixin(BaseJetStreamRequestReplyMixin):
         /,
         queue: str = "",
         auto_ack: bool = True,
+        timeout: Optional[float] = None,
     ) -> Msg:
         # Wait for consumer next message
-        async for msg in self.consumer_pull_msgs(stream, name, auto_ack=auto_ack):
+        async for msg in self.consumer_pull_msgs(stream, name, auto_ack=auto_ack, timeout=timeout):
             # Return on first message
             return msg
 
