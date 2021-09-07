@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import AsyncGenerator, Optional, Union
 
 from jsm.api.subscription import Msg, Subscription
@@ -217,21 +218,25 @@ class ConsumersMixin(BaseJetStreamRequestReplyMixin):
                     break
                 # Request next message to be published on inbox subject
                 # await self._nc.publish_request(
+                payload_json = {
+                    "batch": 1,
+                    "no_wait": True
+                }
                 await self.publish_request(  # type: ignore[attr-defined]
                     f"$JS.API.CONSUMER.MSG.NEXT.{stream}.{name}",
                     reply=inbox,
-                    payload=b"1",
+                    payload=json.dumps(payload_json).encode(),
                 )
                 # Wait for next message on inbox subscription
                 msg = await subscription.next_msg(timeout=timeout)
                 # Increment message counter
                 total += 1
-                # Optionally acknowledge the message
-                if auto_ack:
-                    # await self._nc.publish(msg.reply, b"")
-                    await self.publish(msg.reply, b"")  # type: ignore[attr-defined]
-                # Yield the message
-                yield msg
+                if len(msg.data) == 0:
+                    yield None
+                else:
+                    if auto_ack:
+                        await self.publish(msg.reply, b"")  # type: ignore[attr-defined]
+                    yield msg
         # Always stop the subscription on exit
         finally:
             await subscription.stop()
