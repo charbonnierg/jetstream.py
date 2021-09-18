@@ -10,20 +10,27 @@ This library also tries to be friendly with `mypy` and `vscode` python extension
 
 ## Installing
 
-At the moment, only installation from source is supported. This can easily be done using `pip`:
+At the moment, only installation from source or wheel is supported. This can easily be done using `pip`:
 
+- Install using `pip` and git repo URL
 
 ```bash
 pip install git+https://github.com/charbonnierg/jetstream.py.git@next
 ```
 
-Or you can add `jetstream.py` as a project dependency using `poetry`:
+- Or you can add `jetstream.py` as a project dependency using `poetry`:
 
 ```bash
 poetry add git+https://github.com/charbonnierg/jetstream.py@next
 ```
 
 > Note: In both cases, you can specify a different branch or tag name in the git URL after the `@` character instead of default `next`
+
+- Or install a release directly from wheel archive:
+
+```bash
+pip install "https://github.com/charbonnierg/jetstream.py/releases/download/v0.1.0/jetstream_python-0.1.0-py3-none-any.whl"
+```
 
 ## Basic usage
 
@@ -56,9 +63,19 @@ async def run():
     # Publish a message that will be routed to the consumer
     await js.publish("test.demo", b"hola")
 
+    # Publish a message and wait for acknowledgement
+    # Returns a PubAck instance: PubAck(stream='TEST', seq=2, domain=None, duplicate=None)
+    ack = await js.stream_publish("test.demo", b"hello")
+    # You can access each field as an attribute
+    assert ack.stream == "TEST"
+
     # Fetch the next message from the consumer and automatically acknowledge it
     msg = await js.consumer_msg_next("TEST", "test-app-01", auto_ack=True)
     assert msg.data == b"hola"
+
+    # Iterate over messages and acknowledge them automatically
+    async for msg in js.consumer_pull_msgs("TEST", "test-app-01", max_msgs=1):
+        print(msg.data)
 ```
 
 ## Example Notebooks
