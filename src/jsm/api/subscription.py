@@ -39,7 +39,7 @@ class Msg:
         if not self._client:
             raise NatsError("client not set")
 
-        await self._client.publish(self.reply, data, headers=self.headers)
+        await self._client.publish(self.reply, data)
 
     async def ack(self) -> None:
         """Acknowledge a JetStream message"""

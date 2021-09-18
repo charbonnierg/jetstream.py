@@ -23,6 +23,7 @@ from jsm.models.streams import (
     IoNatsJetstreamApiV1StreamUpdateRequest,
     IoNatsJetstreamApiV1StreamUpdateResponse,
     Mirror,
+    PubAck,
     Retention,
     Storage,
 )
@@ -418,3 +419,21 @@ class StreamsMixin(BaseJetStreamRequestReplyMixin):
             raise_on_error=raise_on_error,
             timeout=timeout,
         )
+
+    async def stream_publish(
+        self,
+        subject: str,
+        /,
+        payload: bytes,
+        timeout: Optional[float] = None,
+    ) -> PubAck:
+        """Publish a message to an NATS subject and wait for stream acknowledgement.
+
+        Args:
+            * `subject`: subject to publish message to
+            * `payload`: content of the message in bytes
+            * `timeout`: optional timeout in seconds
+        """
+        options = {"timeout": timeout} if timeout else {}
+        res = await self.request(subject, payload, **options)  # type: ignore[attr-defined]
+        return PubAck.parse_raw(res.data)
