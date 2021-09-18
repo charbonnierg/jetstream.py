@@ -69,6 +69,10 @@ class Config(JetstreamModel):
         "last",
         description="Specify where in the stream the consumer should start receiving messages",
     )
+    deliver_group: Optional[str] = Field(
+        None,
+        description="specify which deliver group (or queue group name) the consumer is created for",
+    )
     ack_policy: AckPolicy = Field(
         "explicit",
         description="How messages should be acknowledged",
@@ -150,6 +154,10 @@ class Delivered(JetstreamModel):
         description="The sequence number of the Stream",
         ge=0,
     )
+    last: Optional[datetime] = Field(
+        None,
+        description="A timestamp that shows when last message was delivered",
+    )
 
 
 class AckFloor(JetstreamModel):
@@ -167,6 +175,9 @@ class AckFloor(JetstreamModel):
         ...,
         description="The sequence number of the Stream",
         ge=0,
+    )
+    last: Optional[datetime] = Field(
+        None, description="A timestamp that shows when last message was ACKed"
     )
 
 
@@ -218,6 +229,10 @@ class IoNatsJetstreamApiV1ConsumerItem(JetstreamModel):
         ge=0,
     )
     cluster: Optional[Cluster] = None
+    push_bound: Optional[bool] = Field(
+        None,
+        description="Indicates if any client is connected and receiving messages from a push consumer",
+    )
 
 
 class IoNatsJetstreamApiV1ConsumerCreateResponse(

@@ -269,6 +269,15 @@ class State(JetstreamModel):
     )
 
 
+class PubAck(JetstreamModel):
+    stream: str = Field(..., description="Name of the stream")
+    seq: int = Field(..., description="Sequence of the message in the steam")
+    domain: Optional[str] = Field(
+        None, description="JetStream domain which acknowledged the message"
+    )
+    duplicate: Optional[bool] = None
+
+
 class IoNatsJetstreamApiV1StreamItem(JetstreamModel):
     config: Config = Field(
         ...,
