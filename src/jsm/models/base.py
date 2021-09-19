@@ -10,6 +10,7 @@ from .utils import convert_datetime_to_iso_8601_with_z_suffix
 class JetstreamModel(BaseModel):
     class Config:
         json_encoder = {datetime: convert_datetime_to_iso_8601_with_z_suffix}
+        arbitrary_types_allowed = True
 
 
 class BaseRequest(JetstreamModel):

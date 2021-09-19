@@ -194,11 +194,11 @@ class IoNatsJetstreamApiV1ConsumerItem(JetstreamModel):
     )
     config: Config = Field(
         ...,
-        description="Stream config",
+        description="Consumer config",
     )
     created: datetime = Field(
         ...,
-        description="Stream creation timestamp",
+        description="Consumer creation timestamp",
     )
     delivered: Delivered = Field(
         ...,

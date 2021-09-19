@@ -3,6 +3,8 @@ from __future__ import annotations
 from asyncio import Future, Queue, TimeoutError, create_task, wait_for
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional
 
+from loguru import logger
+
 from nats.aio.client import Client as NC
 from nats.aio.client import Msg as _Msg
 from nats.aio.errors import ErrTimeout, NatsError
@@ -32,14 +34,14 @@ class Msg:
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}: subject='{self.subject}' reply='{self.reply}' data='{self.data[:10].decode()}...'>"
 
-    async def respond(self, data: bytes) -> None:
+    async def respond(self, data: Optional[bytes] = None) -> None:
         """Respond to message using message reply field as subject"""
         if not self.reply:
             raise NatsError("no reply subject available")
         if not self._client:
             raise NatsError("client not set")
 
-        await self._client.publish(self.reply, data)
+        await self._client.publish(self.reply, data or b"")
 
     async def ack(self) -> None:
         """Acknowledge a JetStream message"""
@@ -65,7 +67,7 @@ class Subscription:
         /,
         *,
         queue: str = "",
-        cb: Optional[Callable[..., Awaitable[Any]]] = None,
+        cb: Optional[Callable[[Msg], Awaitable[Any]]] = None,
         **kwargs: Any,
     ) -> None:
         self._nc = client
@@ -131,8 +133,14 @@ class Subscription:
 
         # Create a coroutine function that wait for message
         async def _next_msg() -> None:
-            msg = await self._inbox_queue.get()
-            future.set_result(msg)
+            try:
+
+                _msg = await self._inbox_queue.get()
+                msg = Msg._from_msg(_msg, self._nc)
+                future.set_result(msg)
+            except Exception:
+                logger.exception("Failed to process message")
+                raise
 
         # Create a task that wraps the coroutine
         task = create_task(_next_msg())
@@ -149,9 +157,8 @@ class Subscription:
             task.cancel()
             raise ErrTimeout
 
-    async def _listener(self, _msg: _Msg) -> None:
+    async def _listener(self, msg: Msg) -> None:
         """Listenner that store messages in queues."""
-        msg = Msg._from_msg(_msg, self._nc)
         # Add message to inbox queue
         await self._inbox_queue.put(msg)
         # Also forward message to additional delivery queues

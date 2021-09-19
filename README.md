@@ -118,6 +118,13 @@ Two examples notebooks are available:
 - Get consumer next message
 - Iterate over consumer messages
 
+### Key/Value Store
+
+- Create a bucket
+- Put key value in bucket
+- Read key value from bucket
+- Read whole key history from bucket
+- Delete a bucket
 
 ## Client implementation
 

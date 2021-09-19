@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Generic, Optional, Type, TypeVar, Union
 
-from nats.aio.client import Msg
 from pydantic import BaseModel
 from pydantic.generics import GenericModel
 
 from jsm.models.base import BaseResponse
 from jsm.models.errors import IoNatsJetstreamApiV1ErrorResponse
+from nats.aio.client import Msg
 
 ResponseItemT = TypeVar("ResponseItemT", bound=BaseResponse)
 
