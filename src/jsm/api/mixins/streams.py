@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from base64 import b64decode
 from typing import Any, Dict, List, Optional, Union
 
 from jsm.models.errors import IoNatsJetstreamApiV1ErrorResponse
+from jsm.models.messages import Message
 from jsm.models.streams import (
     Discard,
     IoNatsJetstreamApiV1StreamCreateRequest,
@@ -118,10 +120,12 @@ class StreamsMixin(BaseJetStreamRequestReplyMixin):
         max_msg_size: int = -1,
         storage: Storage = "file",
         num_replicas: int = 1,
-        timeout: Optional[float] = None,
-        raise_on_error: Optional[bool] = None,
+        duplicate_window: Optional[int] = 0,
+        no_ack: Optional[bool] = False,
         mirror: Optional[Mirror] = None,
         sources: Optional[List[str]] = None,
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[
         IoNatsJetstreamApiV1StreamCreateResponse, IoNatsJetstreamApiV1ErrorResponse
@@ -166,6 +170,8 @@ class StreamsMixin(BaseJetStreamRequestReplyMixin):
             num_replicas=num_replicas,
             mirror=mirror,
             sources=sources,
+            duplicate_window=duplicate_window,
+            no_ack=no_ack,
             **kwargs,
         )
         return await self._jetstream_request(
@@ -362,7 +368,8 @@ class StreamsMixin(BaseJetStreamRequestReplyMixin):
         self,
         name: str,
         /,
-        seq: int,
+        seq: Optional[int] = None,
+        last_by_subj: Optional[str] = None,
         timeout: Optional[float] = None,
         raise_on_error: Optional[bool] = None,
     ) -> Union[
@@ -379,14 +386,19 @@ class StreamsMixin(BaseJetStreamRequestReplyMixin):
         Returns:
                An IoNatsJetstreamApiV1StreamMsgGetResponse or an IoNatsJetstreamApiV1ErrorResponse.
         """
-        options = IoNatsJetstreamApiV1StreamMsgGetRequest(seq=seq)
-        return await self._jetstream_request(
+        options = IoNatsJetstreamApiV1StreamMsgGetRequest(
+            seq=seq, last_by_subj=last_by_subj
+        )
+        res = await self._jetstream_request(
             f"STREAM.MSG.GET.{name}",
             options,
             JetStreamResponse[IoNatsJetstreamApiV1StreamMsgGetResponse],
             raise_on_error=raise_on_error,
             timeout=timeout,
         )
+        if isinstance(res, IoNatsJetstreamApiV1StreamMsgGetResponse):
+            res.message.data = b64decode(res.message.data)
+        return res
 
     async def stream_msg_delete(
         self,
@@ -425,6 +437,7 @@ class StreamsMixin(BaseJetStreamRequestReplyMixin):
         subject: str,
         /,
         payload: bytes,
+        headers: Optional[Dict[str, str]] = None,
         timeout: Optional[float] = None,
     ) -> PubAck:
         """Publish a message to an NATS subject and wait for stream acknowledgement.
@@ -434,6 +447,107 @@ class StreamsMixin(BaseJetStreamRequestReplyMixin):
             * `payload`: content of the message in bytes
             * `timeout`: optional timeout in seconds
         """
-        options = {"timeout": timeout} if timeout else {}
-        res = await self.request(subject, payload, **options)  # type: ignore[attr-defined]
+        res = await self.request(subject, payload, timeout=timeout, headers=headers)  # type: ignore[attr-defined]
         return PubAck.parse_raw(res.data)
+
+    async def kv_add(
+        self,
+        name: str,
+        history: int = -1,
+        ttl: int = 0,
+        max_bucket_size: int = -1,
+        max_value_size: int = -1,
+        duplicate_window: int = 0,
+        replicas: int = 1,
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
+    ) -> IoNatsJetstreamApiV1StreamCreateResponse:
+        """Add a new KV store (bucket).
+
+        Args:
+            name: Name of the bucket.
+            history: How many historic values to keep per key.
+            ttl: How long to keep values for, expressed in nanoseconds.
+            max_bucket_size: Maximum size for the bucket in bytes.
+            max_value_size: Maximum size for any single value in bytes.
+            duplicate_window: The time window to track duplicate messages for, expressed in nanoseconds.
+            replicas: How many replicas of the data to store.
+            timeout: timeout to wait before raising a TimeoutError.
+            raise_on_error: Raise an Exception if response from JetStream is not a successfull response.
+        """
+        result = await self.stream_create(
+            # The main write bucket must be called KV_<Bucket Name>
+            f"KV_{name}",
+            # The ingest subjects must be $KV.<Bucket Name>.>
+            subjects=[f"$KV.{name}.>"],
+            # Ack is always enabled
+            no_ack=False,
+            # Number of consumers is always illimited
+            max_consumers=-1,
+            # Limit is always "limits"
+            retention=Retention.limits,
+            # Storage is always "file"
+            storage=Storage.file,
+            # User can still configure replicas
+            num_replicas=replicas,
+            # Duplicate window must be same as max_age when max_age is less than 2 minutes
+            duplicate_window=ttl if ttl < 60 * 5 * 1e9 else duplicate_window,
+            # Key TTL is managed using the max_age key
+            max_age=ttl,
+            # Maximum value sizes can be capped using max_msg_size,
+            max_msg_size=max_value_size,
+            # Overall bucket size can be limited using max_bytes
+            max_bytes=max_bucket_size,
+            # The bucket history is achieved by setting max_msgs_per_subject to the desired history level
+            max_msgs_per_subject=history,
+            timeout=timeout,
+        )
+        return result
+
+    async def kv_rm(
+        self,
+        name: str,
+        timeout: Optional[float] = None,
+        raise_on_error: Optional[bool] = None,
+    ) -> IoNatsJetstreamApiV1StreamDeleteResponse:
+        """Delete a KV store.
+
+        Be careful, this will permanently delete a whole KV store.
+
+        Args:
+            name: Name of the KV store (bucket) to remove
+            timeout: timeout to wait before raising a TimeoutError.
+            raise_on_error: Raise an Exception if response from JetStream is not a successfull response.
+        """
+        res = await self.stream_delete(
+            f"KV_{name}", timeout=timeout, raise_on_error=raise_on_error
+        )
+        return res
+
+    async def kv_get(
+        self,
+        name: str,
+        key: str,
+    ) -> Message:
+        """Fetch a key from a KV store bucket"""
+        result: IoNatsJetstreamApiV1StreamMsgGetResponse = await self.stream_msg_get(
+            f"KV_{name}", last_by_subj=f"$KV.{name}.{key}", raise_on_error=True
+        )
+        return result.message
+
+    async def kv_put(
+        self,
+        name: str,
+        key: str,
+        value: bytes,
+        timeout: Optional[float] = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> PubAck:
+        """Put a new value in a KV Store (bucket) under given key.
+
+        This method can be used to both add a new key/value pair or update an existing key value
+        """
+        # Publish the message and return an acknowledgement
+        return await self.stream_publish(
+            f"$KV.{name}.{key}", payload=value, timeout=timeout, headers=headers
+        )

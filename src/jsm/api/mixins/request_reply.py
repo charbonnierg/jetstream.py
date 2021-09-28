@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Generic, Optional, Type, TypeVar, Union
 
-from nats.aio.client import Msg
 from pydantic import BaseModel
 from pydantic.generics import GenericModel
 
+from _nats.aio.client import Msg
 from jsm.models.base import BaseResponse
 from jsm.models.errors import IoNatsJetstreamApiV1ErrorResponse
 

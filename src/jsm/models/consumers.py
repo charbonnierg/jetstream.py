@@ -194,11 +194,11 @@ class IoNatsJetstreamApiV1ConsumerItem(JetstreamModel):
     )
     config: Config = Field(
         ...,
-        description="Stream config",
+        description="Consumer config",
     )
     created: datetime = Field(
         ...,
-        description="Stream creation timestamp",
+        description="Consumer creation timestamp",
     )
     delivered: Delivered = Field(
         ...,
@@ -340,4 +340,24 @@ class IoNatsJetstreamApiV1ConsumerNamesRequest(BaseRequest):
         None,
         description="Filter the names to those consuming messages matching this subject or wildcard",
         min_length=1,
+    )
+
+
+class IoNatsJetstreamApiV1ConsumerGetNextRequest(BaseRequest):
+    """Request options for `$JS.API.CONSUMER.MSG.NEXT.*.*`"""
+
+    expires: Optional[int] = Field(
+        5000000000,
+        description="A duration from now when the pull should expire, stated in nanoseconds, 0 for no expiry",
+        ge=0,
+    )
+    batch: Optional[int] = Field(
+        1,
+        description="How many messages the server should deliver to the requestor",
+        ge=0,
+        le=256,
+    )
+    no_wait: Optional[bool] = Field(
+        False,
+        description="When true a response with a 404 status header will be returned when no messages are available",
     )

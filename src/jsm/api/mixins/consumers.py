@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import AsyncGenerator, Optional, Union
+from datetime import datetime
+from typing import AsyncGenerator, List, Optional, Union
 
-from jsm.api.subscription import Msg, Subscription
+from _nats.aio.client import Subscription
 from jsm.models.consumers import (
     AckPolicy,
     Config,
@@ -10,6 +11,7 @@ from jsm.models.consumers import (
     IoNatsJetstreamApiV1ConsumerCreateRequest,
     IoNatsJetstreamApiV1ConsumerCreateResponse,
     IoNatsJetstreamApiV1ConsumerDeleteResponse,
+    IoNatsJetstreamApiV1ConsumerGetNextRequest,
     IoNatsJetstreamApiV1ConsumerInfoResponse,
     IoNatsJetstreamApiV1ConsumerListRequest,
     IoNatsJetstreamApiV1ConsumerListResponse,
@@ -18,6 +20,7 @@ from jsm.models.consumers import (
     ReplayPolicy,
 )
 from jsm.models.errors import IoNatsJetstreamApiV1ErrorResponse
+from jsm.models.messages import Message
 
 from .request_reply import BaseJetStreamRequestReplyMixin, JetStreamResponse
 
@@ -80,9 +83,9 @@ class ConsumersMixin(BaseJetStreamRequestReplyMixin):
     async def consumer_create(
         self,
         stream: str,
-        name: str,
         /,
         deliver_subject: Optional[str] = None,
+        deliver_group: Optional[str] = None,
         deliver_policy: DeliverPolicy = "last",
         replay_policy: ReplayPolicy = "instant",
         ack_policy: AckPolicy = "explicit",
@@ -101,9 +104,9 @@ class ConsumersMixin(BaseJetStreamRequestReplyMixin):
         IoNatsJetstreamApiV1ConsumerCreateResponse, IoNatsJetstreamApiV1ErrorResponse
     ]:
         config = Config(
-            name=name,
             deliver_subject=deliver_subject,
             deliver_policy=deliver_policy,
+            deliver_group=deliver_group,
             ack_policy=ack_policy,
             ack_wait=ack_wait,
             max_deliver=max_deliver,
@@ -120,7 +123,7 @@ class ConsumersMixin(BaseJetStreamRequestReplyMixin):
             stream_name=stream, config=config
         )
         return await self._jetstream_request(
-            f"CONSUMER.CREATE.{stream}.{name}",
+            f"CONSUMER.CREATE.{stream}",
             options,
             JetStreamResponse[IoNatsJetstreamApiV1ConsumerCreateResponse],
             raise_on_error=raise_on_error,
@@ -134,6 +137,7 @@ class ConsumersMixin(BaseJetStreamRequestReplyMixin):
         /,
         durable_name: Optional[str] = None,
         deliver_subject: Optional[str] = None,
+        deliver_group: Optional[str] = None,
         deliver_policy: DeliverPolicy = "last",
         replay_policy: ReplayPolicy = "instant",
         ack_policy: AckPolicy = "explicit",
@@ -155,6 +159,7 @@ class ConsumersMixin(BaseJetStreamRequestReplyMixin):
             name=name,
             durable_name=durable_name or name,
             deliver_subject=deliver_subject,
+            deliver_group=deliver_group,
             deliver_policy=deliver_policy,
             ack_policy=ack_policy,
             ack_wait=ack_wait,
@@ -184,55 +189,74 @@ class ConsumersMixin(BaseJetStreamRequestReplyMixin):
         stream: str,
         name: str,
         /,
-        queue: str = "",
+        no_wait: bool = False,
+        timeout: Optional[float] = None,
         auto_ack: bool = True,
-    ) -> Msg:
+    ) -> Union[Message, None]:
+        """Wait and return next message by default. If no_wait is True and no message is available, None is returned."""
         # Wait for consumer next message
-        async for msg in self.consumer_pull_msgs(stream, name, auto_ack=auto_ack):
+        async for msg in self.consumer_pull_msgs(
+            stream, name, timeout=timeout, auto_ack=auto_ack, no_wait=no_wait
+        ):
             # Return on first message
             return msg
+        return None
 
     async def consumer_pull_msgs(
         self,
         stream: str,
         name: str,
         /,
+        no_wait: bool = False,
+        timeout: Optional[float] = None,
         auto_ack: bool = True,
         max_msgs: Optional[int] = None,
-    ) -> AsyncGenerator[Msg, None]:
+    ) -> AsyncGenerator[Union[Message, None], None]:
         # inbox: str = self._nc._nuid.next().decode("utf-8")
         inbox: str = self._nuid.next().decode("utf-8")  # type: ignore[attr-defined]
-        # subscription = Subscription(self._nc, inbox)
-        subscription = Subscription(self, inbox)
         total: int = 0
-        # Start the subscription
-        await subscription.start()
+        subscription: Subscription = await self.subscribe(inbox)  # type: ignore[attr-defined]
         # Stop subscription on error
         try:
             while True:
                 # Stop subscription if maximum number of message has been received
-                if max_msgs and max_msgs <= total:
+                if max_msgs and (max_msgs <= total):
                     break
+                # Generate payload
+                payload = (
+                    IoNatsJetstreamApiV1ConsumerGetNextRequest(
+                        batch=1,
+                        expires=timeout * 1e9 if timeout else None,
+                        no_wait=no_wait if no_wait else None,
+                    )
+                    .json(exclude_none=True)
+                    .encode()
+                )
                 # Request next message to be published on inbox subject
                 # await self._nc.publish_request(
-                await self.publish_request(  # type: ignore[attr-defined]
+                await self.publish(  # type: ignore[attr-defined]
                     f"$JS.API.CONSUMER.MSG.NEXT.{stream}.{name}",
+                    payload=payload,
                     reply=inbox,
-                    payload=b"1",
                 )
                 # Wait for next message on inbox subscription
-                msg = await subscription.next_msg()
+                msg = await subscription.next_msg(timeout=timeout)
+                try:
+                    message = Message.from_msg(msg)
+                except ValueError:
+                    if msg.headers.get("Status") == "404":
+                        if no_wait:
+                            yield None
                 # Increment message counter
                 total += 1
                 # Optionally acknowledge the message
                 if auto_ack:
-                    # await self._nc.publish(msg.reply, b"")
-                    await self.publish(msg.reply, b"")  # type: ignore[attr-defined]
+                    await message.ack()
                 # Yield the message
-                yield msg
+                yield message
         # Always stop the subscription on exit
         finally:
-            await subscription.stop()
+            await subscription.unsubscribe()
 
     async def consumer_delete(
         self,
@@ -248,3 +272,37 @@ class ConsumersMixin(BaseJetStreamRequestReplyMixin):
             timeout=timeout,
             raise_on_error=raise_on_error,
         )
+
+    async def kv_history(
+        self,
+        name: str,
+        key: str,
+        timeout: Optional[float] = None,
+    ) -> List[Message]:
+        """This is not efficient, I think it should NOT use a durable consumer, but I don't know how to use non durable consumers."""
+        # Create a consumer without durable name
+        _now = int(datetime.utcnow().timestamp() * 1000)
+        _stream = f"KV_{name}"
+        _subject = f"$KV.{name}.{key}"
+        _consumer = f"{_stream}_HISTORY_{_now}"
+        consumer: IoNatsJetstreamApiV1ConsumerCreateResponse = (
+            await self.consumer_durable_create(
+                _stream,
+                _consumer,
+                deliver_group=_consumer,
+                deliver_subject=None,
+                deliver_policy=DeliverPolicy.all,
+                replay_policy=ReplayPolicy.instant,
+                filter_subject=_subject,
+                raise_on_error=True,
+                timeout=timeout,
+            )
+        )
+        history_size = consumer.num_pending
+        versions = []
+        async for msg in self.consumer_pull_msgs(
+            _stream, _consumer, max_msgs=history_size, auto_ack=True
+        ):
+            versions.append(msg)
+        await self.consumer_delete(_stream, _consumer)
+        return versions

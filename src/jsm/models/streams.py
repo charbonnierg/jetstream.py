@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
-from pydantic import Field, validator
+from pydantic import Field, root_validator, validator
 
 from .base import BaseRequest, BaseResponse, JetstreamModel
 from .clusters import Cluster
@@ -512,10 +512,29 @@ class IoNatsJetstreamApiV1StreamNamesRequest(BaseRequest):
 
 
 class IoNatsJetstreamApiV1StreamMsgGetRequest(BaseRequest):
-    seq: int = Field(
-        ...,
-        description="Stream sequence number of the message to retrieve",
+    seq: Optional[int] = Field(
+        None,
+        description="Stream sequence number of the message to retrieve. Cannot be combined with last_by_subj",
     )
+    last_by_subj: Optional[str] = Field(
+        None,
+        description="Retrieves the last message for a given subject, cannot be combined with seq",
+    )
+
+    @root_validator
+    def check_exclusive_params(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure exactly 1 parameter is set between 'seq' and 'last_by_subj'"""
+        seq = values.get("seq", None)
+        last_by_subj = values.get("last_by_subj", None)
+        if seq and last_by_subj:
+            raise ValueError(
+                "Both 'seq' and 'last_by_subj' arguments cannot be specified at same time"
+            )
+        if seq is None and not last_by_subj:
+            raise ValueError(
+                "Either 'seq' or 'last_by_subj' argument must be specified."
+            )
+        return values
 
 
 class IoNatsJetstreamApiV1StreamMsgDeleteRequest(BaseRequest):

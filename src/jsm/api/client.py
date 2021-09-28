@@ -1,12 +1,10 @@
-from typing import Any, Callable, Optional
+from typing import Optional
 
-from nats.aio.client import Client as NC
-from nats.aio.client import Msg
+from _nats.aio.client import Client as NC
 
 from .mixins.consumers import ConsumersMixin
 from .mixins.infos import AccountInfosMixin
 from .mixins.streams import StreamsMixin
-from .subscription import Subscription
 
 
 class Client(NC, AccountInfosMixin, ConsumersMixin, StreamsMixin):
@@ -68,24 +66,10 @@ class Client(NC, AccountInfosMixin, ConsumersMixin, StreamsMixin):
     def __init__(
         self,
         domain: Optional[str] = None,
-        default_timeout: float = 0.5,
+        default_timeout: float = 1.0,
         raise_on_error: bool = False,
     ):
         super().__init__()
         self._prefix = f"$JS.{domain}.API" if domain else "$JS.API"
         self._timeout = default_timeout
         self._raise_on_error = raise_on_error
-
-    def create_subscribtion(
-        self,
-        subject: str,
-        queue: str = "",
-        cb: Optional[Callable[[Msg], Any]] = None,
-        **kwargs: Any,
-    ) -> Subscription:
-        """Create a subscription but does not start it automatically."""
-        return Subscription(self, subject, cb=cb, queue=queue, **kwargs)
-
-    async def acknowledge(self, msg: Msg) -> None:
-        """Acknoledge a message received by a consumer."""
-        await self.publish(msg.reply, b"")
