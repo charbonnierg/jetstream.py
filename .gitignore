@@ -13,3 +13,5 @@ build-tools/*.gz
 **/__pycache__
 **/*.pyc
 **/.ipynb_checkpoints
+.coverage
+htmlcov/
