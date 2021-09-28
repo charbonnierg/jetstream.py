@@ -1,4 +1,4 @@
-from nats.aio.errors import NatsError
+from _nats.aio.errors import NatsError
 
 
 class ErrSubscriptionNotStarted(NatsError):

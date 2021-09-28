@@ -1,4 +1,4 @@
-# `jetstream.py` -  Jetstream Client for Asyncio
+# `jetstream.py` - Jetstream Client for Asyncio
 
 An asyncio Python3 client for [Jetstream enabled NATS servers](https://docs.nats.io/jetstream/jetstream).
 
@@ -42,7 +42,7 @@ async def run():
     # You can optionally specify a js domain using "domain" keyword argument
     js = JS(domain=None)
 
-    # This is the connect method from nats.aio.client.Client class
+    # This is the connect method from _nats.aio.client.Client class
     await js.connect()
 
     # Request account info
@@ -60,8 +60,8 @@ async def run():
     # Create a consumer
     await js.consumer_create("TEST", "test-app-01")
 
-    # Publish a message that will be routed to the consumer
-    await js.publish("test.demo", b"hola")
+    # Publish a message that will be routed to the consumer, string headers are supported
+    await js.publish("test.demo", b"hola", headers={"foo": "bar"})
 
     # Publish a message and wait for acknowledgement
     # Returns a PubAck instance: PubAck(stream='TEST', seq=2, domain=None, duplicate=None)
@@ -118,13 +118,20 @@ Two examples notebooks are available:
 - Get consumer next message
 - Iterate over consumer messages
 
+### Key/Value Store
+
+- Create a bucket
+- Put key value in bucket
+- Read key value from bucket
+- Read whole key history from bucket
+- Delete a bucket
 
 ## Client implementation
 
 JetStream API methods are implemented under several mixins located in [jsm.api](./src/jsm/api) submodule.
 
 - a JetStream API method often has an associated `request` pydantic model
-- a JetStream API method always has an associated  `response` pydantic model
+- a JetStream API method always has an associated `response` pydantic model
 - a JetStream API method is invoked by sending a request to a specific subject, as described in JetStream NATS API Reference.
 
 Python methods implemented under each mixin roughly follow the same pattern:
@@ -147,7 +154,7 @@ Take the `$JS.API.STREAMS.LIST` method for example:
         # Both return types inherit at some point from pydantic.BaseModel
     ) -> Union[
         # Method can either return a StreamListResponse
-        IoNatsJetstreamApiV1StreamListResponse, 
+        IoNatsJetstreamApiV1StreamListResponse,
         # Or an error
         IoNatsJetstreamApiV1ErrorResponse
     ]:
@@ -168,7 +175,6 @@ Take the `$JS.API.STREAMS.LIST` method for example:
 ```
 
 [`JetStreamResponse`](https://github.com/charbonnierg/jetstream.py/blob/next/src/jsm/api/mixins/request_reply.py#L15) is a `pydantic.generics.GenericModel` used to either parse an error, or a response according to the type given as argument.
-
 
 ## References
 
