@@ -1,3 +1,11 @@
+----
+Warning
+
+I won't touch this repo until [nats.py issue #210](https://github.com/nats-io/nats.py/pull/210) is either closed or merged. If you wish to interact with JetStream, you can use my fork of [nats.py](https://github.com/charbonnierg/nats.py) (`pip install git+https://github.com/charbonnierg/nats.py.git@next`)
+
+
+-----------------
+
 # `jetstream.py` - Jetstream Client for Asyncio
 
 An asyncio Python3 client for [Jetstream enabled NATS servers](https://docs.nats.io/jetstream/jetstream).
